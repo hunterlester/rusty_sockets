@@ -4,5 +4,5 @@ version = "0.1.0"
 authors = ["hunterlester <guilfordhunter@gmail.com>"]
 
 [dependencies]
-mio = { git = "https://github.com/carllerche/mio" }
+mio = "0.5"
 http-muncher = "0.2.0"
