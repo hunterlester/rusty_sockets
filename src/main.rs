@@ -1,3 +1,4 @@
+
 extern crate mio;
 extern crate http_muncher;
 extern crate sha1;
@@ -38,7 +39,9 @@ impl ParserHandler for HttpParser {
     }
 
     fn on_header_value(&mut self, s: &[u8]) -> bool {
-        self.headers.borrow_mut().insert(self.current_key.clone().unwrap(), std::str::from_utf8(s).unwrap().to_string());
+        self.headers.borrow_mut()
+            .insert(self.current_key.clone().unwrap(),
+                    std::str::from_utf8(s).unwrap().to_string());
         true
     }
 
@@ -63,7 +66,6 @@ struct WebSocketClient {
 }
 
 impl WebSocketClient {
-
     fn new(socket: TcpStream) -> WebSocketClient {
         let headers = Rc::new(RefCell::new(HashMap::new()));
 
@@ -81,16 +83,14 @@ impl WebSocketClient {
 
     fn write(&mut self) {
         let headers = self.headers.borrow();
-
         let response_key = gen_key(&headers.get("Sec-WebSocket-Key").unwrap());
-
         let response = fmt::format(format_args!("HTTP/1.1 101 Switching Protocols\r\n\
-                                                Connection: Upgrade\r\n\
-                                                Sec-WebSocket-Accept: {}\r\n\
-                                                Upgrade: websocket\r\n\r\n", response_key));
-
+                                                 Connection: Upgrade\r\n\
+                                                 Sec-WebSocket-Accept: {}\r\n\
+                                                 Upgrade: websocket\r\n\r\n", response_key));
         self.socket.try_write(response.as_bytes()).unwrap();
 
+        // Change the state
         self.state = ClientState::Connected;
 
         self.interest.remove(EventSet::writable());
@@ -106,15 +106,17 @@ impl WebSocketClient {
                     return
                 },
                 Ok(None) =>
+                    // Socket buffer has got no more bytes.
                     break,
                 Ok(Some(len)) => {
-                    self.http_parser.parse(&buf[0..len]);
+                    self.http_parser.parse(&buf);
                     if self.http_parser.is_upgrade() {
+                        // Change the current state
                         self.state = ClientState::HandshakeResponse;
 
+                        // Change current interest to `Writable`
                         self.interest.remove(EventSet::readable());
                         self.interest.insert(EventSet::writable());
-
                         break;
                     }
                 }
@@ -152,12 +154,14 @@ impl Handler for WebSocketServer {
                     self.clients.insert(new_token, WebSocketClient::new(client_socket));
                     self.token_counter += 1;
 
-                    event_loop.register(&self.clients[&new_token].socket, new_token, EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
+                    event_loop.register(&self.clients[&new_token].socket, new_token, EventSet::readable(),
+                                        PollOpt::edge() | PollOpt::oneshot()).unwrap();
                 },
-                token => {
+	        token => {
                     let mut client = self.clients.get_mut(&token).unwrap();
                     client.read();
-                    event_loop.reregister(&client.socket, token, client.interest, PollOpt::edge() | PollOpt::oneshot()).unwrap();
+                    event_loop.reregister(&client.socket, token, client.interest,
+                                          PollOpt::edge() | PollOpt::oneshot()).unwrap();
                 }
             }
         }
@@ -165,12 +169,11 @@ impl Handler for WebSocketServer {
         if events.is_writable() {
             let mut client = self.clients.get_mut(&token).unwrap();
             client.write();
-            event_loop.reregister(&client.socket, token, client.interest, PollOpt::edge() | PollOpt::oneshot()).unwrap();
+            event_loop.reregister(&client.socket, token, client.interest,
+                                  PollOpt::edge() | PollOpt::oneshot()).unwrap();
         }
     }
 }
-
-
 
 fn main() {
     let address = "0.0.0.0:10000".parse::<SocketAddr>().unwrap();
@@ -184,8 +187,9 @@ fn main() {
         socket: server_socket
     };
 
-    event_loop.register(&server.socket, SERVER_TOKEN, EventSet::readable(), PollOpt::edge()).unwrap();
-
+    event_loop.register(&server.socket,
+                        SERVER_TOKEN,
+                        EventSet::readable(),
+                        PollOpt::edge()).unwrap();
     event_loop.run(&mut server).unwrap();
-
 }
