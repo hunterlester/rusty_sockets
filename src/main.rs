@@ -47,13 +47,14 @@ impl ParserHandler for HttpParser {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum ClientState {
     AwaitingHandshake,
     HandshakeResponse,
     Connected
 }
 
+#[derive(Debug)]
 struct WebSocketClient {
     socket: TcpStream,
     headers: Rc<RefCell<HashMap<String, String>>>,
@@ -123,6 +124,7 @@ impl WebSocketClient {
     }
 }
 
+#[derive(Debug)]
 struct WebSocketServer {
     socket: TcpListener,
     clients: HashMap<Token, WebSocketClient>,
@@ -183,6 +185,7 @@ fn main() {
         clients: HashMap::new(),
         socket: server_socket
     };
+    println!("{:?}", &server);
 
     event_loop.register(&server.socket, SERVER_TOKEN, EventSet::readable(), PollOpt::edge()).unwrap();
 
