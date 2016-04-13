@@ -49,7 +49,7 @@ impl ParserHandler for HttpParser {
 
 #[derive(PartialEq, Debug)]
 enum ClientState {
-    AwaitingHandshake,
+    AwaitingHandshake(RefCell<Parser<HttpParser>>),
     HandshakeResponse,
     Connected
 }
@@ -58,7 +58,6 @@ enum ClientState {
 struct WebSocketClient {
     socket: TcpStream,
     headers: Rc<RefCell<HashMap<String, String>>>,
-    http_parser: Parser<HttpParser>,
     interest: EventSet,
     state: ClientState
 }
@@ -71,12 +70,11 @@ impl WebSocketClient {
         WebSocketClient {
             socket: socket,
             headers: headers.clone(),
-            http_parser: Parser::request(HttpParser {
+            interest: EventSet::readable(),
+            state: ClientState::AwaitingHandshake(RefCell::new(Parser::request(HttpParser{
                 current_key: None,
                 headers: headers.clone()
-            }),
-            interest: EventSet::readable(),
-            state: ClientState::AwaitingHandshake
+            })))
         }
     }
 
@@ -98,28 +96,24 @@ impl WebSocketClient {
         self.interest.insert(EventSet::readable());
     }
 
+    fn read_handshake(&mut self) {
+        let is_upgrade = if let ClientState::AwaitingHandshake(ref parser_state) = self.state {
+            let mut parser = parser_state.borrow_mut();
+            parser.parse(&buf);
+            parser.is_upgrade()
+        } else { false };
+
+        if is_upgrade {
+            self.state = ClientState::HandshakeResponse;
+        }
+    }
+
     fn read(&mut self) {
-        loop {
-            let mut buf = [0; 2048];
-            match self.socket.try_read(&mut buf) {
-                Err(e) => {
-                    println!("Error while reading socket: {:?}", e);
-                    return
-                },
-                Ok(None) =>
-                    break,
-                Ok(Some(len)) => {
-                    self.http_parser.parse(&buf[0..len]);
-                    if self.http_parser.is_upgrade() {
-                        self.state = ClientState::HandshakeResponse;
-
-                        self.interest.remove(EventSet::readable());
-                        self.interest.insert(EventSet::writable());
-
-                        break;
-                    }
-                }
-            }
+        match self.state {
+            ClientState::AwaitingHandshake => {
+                self.read_handshake();
+            },
+            _ => {}
         }
     }
 }
